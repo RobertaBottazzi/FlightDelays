@@ -7,10 +7,12 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 
 import it.polito.tdp.extflightdelays.model.Airline;
 import it.polito.tdp.extflightdelays.model.Airport;
 import it.polito.tdp.extflightdelays.model.Flight;
+import it.polito.tdp.extflightdelays.model.Rotta;
 
 public class ExtFlightDelaysDAO {
 
@@ -62,7 +64,33 @@ public class ExtFlightDelaysDAO {
 			throw new RuntimeException("Error Connection Database");
 		}
 	}
+	
+	public void loadAllAirports(Map<Integer,Airport> idMap) {
+		String sql = "SELECT * FROM airports";
+		try {
+			Connection conn = ConnectDB.getConnection();
+			PreparedStatement st = conn.prepareStatement(sql);
+			ResultSet rs = st.executeQuery();
 
+			while (rs.next()) {
+				if(!idMap.containsKey(rs.getInt("ID"))) {
+					Airport airport = new Airport(rs.getInt("ID"), rs.getString("IATA_CODE"), rs.getString("AIRPORT"),
+							rs.getString("CITY"), rs.getString("STATE"), rs.getString("COUNTRY"), rs.getDouble("LATITUDE"),
+							rs.getDouble("LONGITUDE"), rs.getDouble("TIMEZONE_OFFSET"));
+					idMap.put(airport.getId(), airport);
+				}
+			}
+
+			conn.close();
+			
+
+		} catch (SQLException e) {
+			e.printStackTrace();
+			System.out.println("Errore connessione al database");
+			throw new RuntimeException("Error Connection Database");
+		}
+	}
+	
 	public List<Flight> loadAllFlights() {
 		String sql = "SELECT * FROM flights";
 		List<Flight> result = new LinkedList<Flight>();
@@ -91,4 +119,62 @@ public class ExtFlightDelaysDAO {
 			throw new RuntimeException("Error Connection Database");
 		}
 	}
+	
+	public List<Airport> getVertici(Map<Integer,Airport> idMap, int x){
+		String sql="SELECT a.ID AS idVertice "
+				+ "FROM airports a, flights f "
+				+ "WHERE (a.ID=f.ORIGIN_AIRPORT_ID OR a.ID=f.DESTINATION_AIRPORT_ID) "
+				+ "GROUP BY a.id "
+				+ "HAVING COUNT(DISTINCT(f.AIRLINE_ID))>? "; //distinct perchè ogni aereoporto ha più voli con la stessa compagnia, io questa la devo contare una sola volta
+		LinkedList<Airport> result= new LinkedList<>();
+		try {
+			Connection conn = ConnectDB.getConnection();
+			PreparedStatement st = conn.prepareStatement(sql);
+			st.setInt(1, x);
+			ResultSet rs = st.executeQuery();
+
+			while (rs.next()) {
+				result.add(idMap.get(rs.getInt("idVertice")));
+			}
+
+			conn.close();
+			return result;
+
+		} catch (SQLException e) {
+			e.printStackTrace();
+			System.out.println("Errore connessione al database");
+			throw new RuntimeException("Error Connection Database");
+		}
+	}
+		public List<Rotta> getRotte(Map<Integer,Airport> idMap){
+			String sql="SELECT f.ORIGIN_AIRPORT_ID, f.DESTINATION_AIRPORT_ID, COUNT(*) AS n "
+					+ "FROM flights f "
+					+ "GROUP BY f.ORIGIN_AIRPORT_ID, f.DESTINATION_AIRPORT_ID"; //prendo un volo solo per ogni aereoporto(?)
+			List<Rotta> result= new LinkedList<Rotta>();
+			try {
+				Connection conn = ConnectDB.getConnection();
+				PreparedStatement st = conn.prepareStatement(sql);
+				ResultSet rs = st.executeQuery();
+
+				while (rs.next()) {
+					Airport sorgente=idMap.get(rs.getInt("ORIGIN_AIRPORT_ID"));
+					Airport destinazione=idMap.get(rs.getInt("DESTINATION_AIRPORT_ID"));
+					if(sorgente!= null && destinazione != null)
+						result.add(new Rotta(idMap.get(rs.getInt("ORIGIN_AIRPORT_ID")), idMap.get(rs.getInt("DESTINATION_AIRPORT_ID")), rs.getInt("n")));
+					else
+						System.out.println("ERRORE IN getRotte()");
+				}
+
+				conn.close();
+				return result;
+
+			} catch (SQLException e) {
+				e.printStackTrace();
+				System.out.println("Errore connessione al database");
+				throw new RuntimeException("Error Connection Database");
+			}
+		}
+	
+	
+	
 }
